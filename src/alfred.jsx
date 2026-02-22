@@ -10,6 +10,8 @@ import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import { Sun, Moon } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { AuthButton } from "@/components/AuthButton";
 
 // ═══════════════════════════════════════════════════════════════════
 // ALFRED
@@ -356,6 +358,28 @@ const saveData = (data) => {
 };
 
 
+// ── SUPABASE HELPERS ────────────────────────────────────────────
+
+async function loadSupabaseData(userId) {
+  const { data: rows, error } = await supabase
+    .from("daily_logs")
+    .select("date, virtues")
+    .eq("user_id", userId)
+    .order("date", { ascending: false });
+  if (error) { console.error("Supabase load error:", error); return null; }
+  return rows.reduce((acc, row) => { acc[row.date] = row.virtues; return acc; }, {});
+}
+
+async function migrateLocalStorageToSupabase(userId) {
+  const localData = loadData();
+  const dates = Object.keys(localData);
+  if (dates.length === 0) return;
+  const rows = dates.map(date => ({ user_id: userId, date, virtues: localData[date] }));
+  const { error } = await supabase.from("daily_logs").upsert(rows, { onConflict: "user_id,date" });
+  if (error) { console.error("Migration error:", error); return; }
+  localStorage.removeItem(STORAGE_KEY);
+}
+
 // ── COMPONENTS ──────────────────────────────────────────────────
 
 const ScoreRing = ({ score, size = 120, strokeWidth = 6, color = 'var(--alfred-accent)' }) => {
@@ -403,16 +427,25 @@ const VirtueRow = ({ virtue, checked, onToggle, domainColor: dc }) => (
 
 // ── VIEWS ───────────────────────────────────────────────────────
 
-const DailyLedger = ({ date, data, setData, isDark }) => {
+const DailyLedger = ({ date, data, setData, isDark, user }) => {
   const dateKey = date;
   const dayData = data[dateKey] || {};
 
-  const toggleVirtue = (virtueId) => {
+  const toggleVirtue = async (virtueId) => {
     const newData = { ...data };
     if (!newData[dateKey]) newData[dateKey] = {};
-    newData[dateKey][virtueId] = !newData[dateKey][virtueId];
-    setData(newData);
-    saveData(newData);
+    newData[dateKey] = { ...newData[dateKey], [virtueId]: !newData[dateKey][virtueId] };
+    setData(newData);  // optimistic update
+
+    if (user) {
+      const { error } = await supabase.from("daily_logs").upsert(
+        { user_id: user.id, date: dateKey, virtues: newData[dateKey] },
+        { onConflict: "user_id,date" }
+      );
+      if (error) { console.error("Write error:", error); setData(data); }
+    } else {
+      saveData(newData);
+    }
   };
 
   const checked = Object.values(dayData).filter(Boolean).length;
@@ -877,6 +910,8 @@ export default function Alfred() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
     setData(loadData());
@@ -885,6 +920,41 @@ export default function Alfred() {
     const next = saved ? saved === "dark" : true;
     setIsDark(next);
     document.documentElement.classList.toggle("dark", next);
+  }, []);
+
+  useEffect(() => {
+    let subscription = null;
+
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) {
+          await migrateLocalStorageToSupabase(u.id);
+          const d = await loadSupabaseData(u.id);
+          if (d) setData(d);
+        }
+      } catch (e) {
+        console.error("Auth init error:", e);
+      } finally {
+        setAuthLoading(false);
+      }
+    })();
+
+    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (event === "SIGNED_IN") {
+        await migrateLocalStorageToSupabase(u.id);
+        const d = await loadSupabaseData(u.id);
+        if (d) setData(d);
+      }
+      if (event === "SIGNED_OUT") setData(loadData());
+    });
+    subscription = data.subscription;
+
+    return () => subscription?.unsubscribe();
   }, []);
 
   const toggleTheme = () => {
@@ -920,24 +990,30 @@ export default function Alfred() {
 
       {/* Header */}
       <div style={{
-        padding: "32px 24px 0", textAlign: "center",
-        borderBottom: "1px solid var(--alfred-accent-dim)", paddingBottom: 24,
-        position: "relative"
+        padding: "32px 24px 24px",
+        borderBottom: "1px solid var(--alfred-accent-dim)",
+        display: "flex", alignItems: "center", justifyContent: "space-between"
       }}>
-        <div style={{ position: "absolute", right: 24, top: 32, display: "flex", alignItems: "center", gap: 8 }}>
+        {/* Left: theme toggle */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
           <Sun size={14} style={{ color: "var(--alfred-text-dim)" }} />
           <Switch checked={isDark} onCheckedChange={toggleTheme} />
           <Moon size={14} style={{ color: "var(--alfred-text-dim)" }} />
         </div>
-        <h1 style={{
-          fontFamily: "'Harvey Serif', serif", fontSize: 38, fontWeight: 500, color: "var(--alfred-accent)",
-          margin: 0, letterSpacing: "0.12em"
-        }}>ALFRED</h1>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 8 }}>
+        {/* Center: title */}
+        <div style={{ textAlign: "center" }}>
+          <h1 style={{
+            fontFamily: "'Harvey Serif', serif", fontSize: 38, fontWeight: 500, color: "var(--alfred-accent)",
+            margin: 0, letterSpacing: "0.12em"
+          }}>ALFRED</h1>
           <div style={{
             fontFamily: "'DM Sans', sans-serif", fontSize: 9, color: "var(--alfred-text-dim)",
-            letterSpacing: "0.3em"
+            letterSpacing: "0.3em", marginTop: 8
           }}>{TOTAL_VIRTUES} VIRTUES · 7 DOMAINS · 0 EXCUSES</div>
+        </div>
+        {/* Right: auth */}
+        <div style={{ display: "flex", justifyContent: "flex-end", minWidth: 120 }}>
+          <AuthButton user={user} isDark={isDark} />
         </div>
       </div>
 
@@ -1008,7 +1084,7 @@ export default function Alfred() {
 
       {/* Content */}
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 24px 80px" }}>
-        {view === "daily" && <DailyLedger date={selectedDate} data={data} setData={setData} isDark={isDark} />}
+        {view === "daily" && <DailyLedger date={selectedDate} data={data} setData={setData} isDark={isDark} user={user} />}
         {view === "weekly" && <WeeklyLedger weekOffset={weekOffset} data={data} isDark={isDark} />}
         {view === "standards" && <StandardsView isDark={isDark} />}
         {view === "analytics" && <AnalyticsView data={data} isDark={isDark} />}
