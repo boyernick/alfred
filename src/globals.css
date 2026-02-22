@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── LIGHT MODE (:root = shadcn convention) ───────────────────── */
+  :root {
+    --alfred-bg:           hsl(343, 8%, 97%);
+    --alfred-surface:      hsl(343, 8%, 93%);
+    --alfred-border:       hsl(343, 8%, 82%);
+    --alfred-border-faint: hsl(343, 6%, 88%);
+    --alfred-text:         hsl(343, 8%, 10%);
+    --alfred-text-mid:     hsl(343, 6%, 32%);
+    --alfred-text-dim:     hsl(343, 5%, 50%);
+    --alfred-text-faint:   hsl(343, 4%, 70%);
+    --alfred-accent:       hsl(343, 100%, 21%);
+    --alfred-accent-dim:   hsl(343, 30%, 50%);
+
+    /* Raw (space-separated) for Tailwind hsl() usage */
+    --alfred-bg-raw:           343 8% 97%;
+    --alfred-surface-raw:      343 8% 93%;
+    --alfred-border-raw:       343 8% 82%;
+    --alfred-border-faint-raw: 343 6% 88%;
+    --alfred-text-raw:         343 8% 10%;
+    --alfred-text-mid-raw:     343 6% 32%;
+    --alfred-text-dim-raw:     343 5% 50%;
+    --alfred-text-faint-raw:   343 4% 70%;
+    --alfred-accent-raw:       343 100% 21%;
+    --alfred-accent-dim-raw:   343 30% 50%;
+
+    --radius: 0.5rem;
+  }
+
+  /* ── DARK MODE (.dark) — Alfred's original design ─────────────── */
+  .dark {
+    --alfred-bg:           hsl(343, 12%, 5%);
+    --alfred-surface:      hsl(343, 10%, 9%);
+    --alfred-border:       hsl(343, 8%, 16%);
+    --alfred-border-faint: hsl(343, 6%, 12%);
+    --alfred-text:         hsl(343, 5%, 88%);
+    --alfred-text-mid:     hsl(343, 4%, 68%);
+    --alfred-text-dim:     hsl(343, 4%, 50%);
+    --alfred-text-faint:   hsl(343, 3%, 30%);
+    --alfred-accent:       #FFFFFF;
+    --alfred-accent-dim:   hsl(343, 6%, 40%);
+
+    /* Raw (space-separated) for Tailwind */
+    --alfred-bg-raw:           343 12% 5%;
+    --alfred-surface-raw:      343 10% 9%;
+    --alfred-border-raw:       343 8% 16%;
+    --alfred-border-faint-raw: 343 6% 12%;
+    --alfred-text-raw:         343 5% 88%;
+    --alfred-text-mid-raw:     343 4% 68%;
+    --alfred-text-dim-raw:     343 4% 50%;
+    --alfred-text-faint-raw:   343 3% 30%;
+    --alfred-accent-raw:       343 100% 100%;
+    --alfred-accent-dim-raw:   343 6% 40%;
+
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Harvey Serif', serif;
+  }
+}
