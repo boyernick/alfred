@@ -4,12 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
-import { Sun, Moon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { AuthButton } from "@/components/AuthButton";
 
@@ -1019,12 +1017,7 @@ export default function Alfred() {
         borderBottom: "1px solid var(--alfred-accent-dim)",
         display: "flex", alignItems: "center", justifyContent: "space-between"
       }}>
-        {/* Left: theme toggle */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
-          <Sun size={14} style={{ color: "var(--alfred-text-dim)" }} />
-          <Switch checked={isDark} onCheckedChange={toggleTheme} />
-          <Moon size={14} style={{ color: "var(--alfred-text-dim)" }} />
-        </div>
+        <div style={{ minWidth: 120 }} />
         {/* Center: title */}
         <div style={{ textAlign: "center" }}>
           <h1 style={{

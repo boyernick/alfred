@@ -174,11 +174,8 @@ export function AuthButton({ user }) {
     <>
       {user ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ ...baseBtn, cursor: "default", color: "var(--alfred-text-dim)" }}>
-            {user.email.length > 22 ? user.email.slice(0, 22) + "…" : user.email}
-          </span>
           <button onClick={signOut} style={{ ...baseBtn, color: "var(--alfred-text-dim)" }}>
-            OUT
+            LOGOUT
           </button>
         </div>
       ) : (
