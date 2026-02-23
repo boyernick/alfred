@@ -389,7 +389,7 @@ async function loadSupabaseData(accessToken) {
 }
 
 async function saveLog(accessToken, userId, date, virtues) {
-  await dbRequest("/daily_logs", accessToken, {
+  await dbRequest("/daily_logs?on_conflict=user_id,date", accessToken, {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify({ user_id: userId, date, virtues }),
@@ -401,7 +401,7 @@ async function migrateLocalStorageToSupabase(accessToken, userId) {
   const dates = Object.keys(localData);
   if (dates.length === 0) return;
   const rows = dates.map(date => ({ user_id: userId, date, virtues: localData[date] }));
-  await dbRequest("/daily_logs", accessToken, {
+  await dbRequest("/daily_logs?on_conflict=user_id,date", accessToken, {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify(rows),
