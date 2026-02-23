@@ -442,12 +442,14 @@ const DailyLedger = ({ date, data, setData, isDark, user, setWriteError }) => {
     const { data: { session } } = await supabase.auth.getSession();
     const currentUser = session?.user ?? null;
 
+    setWriteError("DEBUG toggle: user=" + (currentUser?.id ?? "null") + " date=" + dateKey);
+
     if (currentUser) {
       const { error } = await supabase.from("daily_logs").upsert(
         { user_id: currentUser.id, date: dateKey, virtues: newData[dateKey] },
         { onConflict: "user_id,date" }
       );
-      if (error) { setWriteError(JSON.stringify(error)); setData(data); }
+      if (error) { setWriteError("UPSERT ERROR: " + JSON.stringify(error)); setData(data); }
     } else {
       saveData(newData);
     }
