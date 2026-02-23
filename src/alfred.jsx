@@ -926,28 +926,13 @@ export default function Alfred() {
   }, []);
 
   useEffect(() => {
-    let subscription = null;
-
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const u = session?.user ?? null;
-        setUser(u);
-        if (u) {
-          await migrateLocalStorageToSupabase(u.id);
-          const d = await loadSupabaseData(u.id);
-          if (d) setData(d);
-        }
-      } catch (e) {
-        console.error("Auth init error:", e);
-      } finally {
-        setAuthLoading(false);
-      }
-    })();
-
-    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const u = session?.user ?? null;
       setUser(u);
+      if (event === "INITIAL_SESSION" && u) {
+        const d = await loadSupabaseData(u.id);
+        if (d) setData(d);
+      }
       if (event === "SIGNED_IN") {
         await migrateLocalStorageToSupabase(u.id);
         const d = await loadSupabaseData(u.id);
@@ -955,9 +940,8 @@ export default function Alfred() {
       }
       if (event === "SIGNED_OUT") setData(loadData());
     });
-    subscription = data.subscription;
 
-    return () => subscription?.unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   const toggleTheme = () => {
