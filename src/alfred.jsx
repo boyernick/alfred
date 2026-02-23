@@ -358,25 +358,54 @@ const saveData = (data) => {
 };
 
 
-// ── SUPABASE HELPERS ────────────────────────────────────────────
+// ── SUPABASE HELPERS (raw fetch — bypasses JS client hang) ─────
 
-async function loadSupabaseData(userId) {
-  const { data: rows, error } = await supabase
-    .from("daily_logs")
-    .select("date, virtues")
-    .eq("user_id", userId)
-    .order("date", { ascending: false });
-  if (error) { console.error("Supabase load error:", error); return null; }
+const DB_URL = import.meta.env.VITE_SUPABASE_URL + "/rest/v1";
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+async function dbRequest(path, accessToken, options = {}) {
+  const res = await fetch(DB_URL + path, {
+    ...options,
+    headers: {
+      apikey: ANON_KEY,
+      Authorization: "Bearer " + accessToken,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(res.status + " " + res.statusText + ": " + text);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function loadSupabaseData(accessToken) {
+  const rows = await dbRequest(
+    "/daily_logs?select=date,virtues&order=date.desc",
+    accessToken
+  );
   return rows.reduce((acc, row) => { acc[row.date] = row.virtues; return acc; }, {});
 }
 
-async function migrateLocalStorageToSupabase(userId) {
+async function saveLog(accessToken, userId, date, virtues) {
+  await dbRequest("/daily_logs", accessToken, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ user_id: userId, date, virtues }),
+  });
+}
+
+async function migrateLocalStorageToSupabase(accessToken, userId) {
   const localData = loadData();
   const dates = Object.keys(localData);
   if (dates.length === 0) return;
   const rows = dates.map(date => ({ user_id: userId, date, virtues: localData[date] }));
-  const { error } = await supabase.from("daily_logs").upsert(rows, { onConflict: "user_id,date" });
-  if (error) { console.error("Migration error:", error); return; }
+  await dbRequest("/daily_logs", accessToken, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(rows),
+  });
   localStorage.removeItem(STORAGE_KEY);
 }
 
@@ -427,37 +456,25 @@ const VirtueRow = ({ virtue, checked, onToggle, domainColor: dc }) => (
 
 // ── VIEWS ───────────────────────────────────────────────────────
 
-const DailyLedger = ({ date, data, setData, isDark, user, setWriteError }) => {
+const DailyLedger = ({ date, data, setData, isDark, session, setWriteError }) => {
   const dateKey = date;
   const dayData = data[dateKey] || {};
 
   const toggleVirtue = async (virtueId) => {
-    setWriteError("DEBUG: toggle fired, user=" + (user?.id ?? "null") + " date=" + dateKey);
-
     const newData = { ...data };
     if (!newData[dateKey]) newData[dateKey] = {};
     newData[dateKey] = { ...newData[dateKey], [virtueId]: !newData[dateKey][virtueId] };
     setData(newData);  // optimistic update
 
-    if (user) {
+    if (session) {
       try {
-        const { error } = await supabase.from("daily_logs").upsert(
-          { user_id: user.id, date: dateKey, virtues: newData[dateKey] },
-          { onConflict: "user_id,date" }
-        );
-        if (error) {
-          setWriteError("UPSERT ERROR: " + JSON.stringify(error));
-          setData(data);
-        } else {
-          setWriteError("SAVED to DB: " + dateKey);
-        }
+        await saveLog(session.access_token, session.user.id, dateKey, newData[dateKey]);
       } catch (e) {
-        setWriteError("UPSERT THREW: " + e.message);
-        setData(data);
+        setWriteError("SAVE ERROR: " + e.message);
+        setData(data);  // revert
       }
     } else {
       saveData(newData);
-      setWriteError("SAVED to localStorage (not signed in)");
     }
   };
 
@@ -924,7 +941,7 @@ export default function Alfred() {
   const [loaded, setLoaded] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [session, setSession] = useState(null);
   const [writeError, setWriteError] = useState(null);
 
   useEffect(() => {
@@ -937,24 +954,28 @@ export default function Alfred() {
   }, []);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const u = session?.user ?? null;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, sess) => {
+      const u = sess?.user ?? null;
       setUser(u);
-      if (event === "INITIAL_SESSION" && u) {
-        const d = await loadSupabaseData(u.id);
-        if (d) {
+      setSession(sess ?? null);
+      if ((event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") && sess) {
+        try {
+          const d = await loadSupabaseData(sess.access_token);
           setData(d);
-          setWriteError("LOADED " + Object.keys(d).length + " rows from DB for " + u.id.slice(0,8));
-        } else {
-          setWriteError("LOAD FAILED (null returned) for " + u.id.slice(0,8));
+        } catch (e) {
+          setWriteError("LOAD ERROR: " + e.message);
         }
       }
       if (event === "SIGNED_IN") {
-        await migrateLocalStorageToSupabase(u.id);
-        const d = await loadSupabaseData(u.id);
-        if (d) setData(d);
+        try {
+          await migrateLocalStorageToSupabase(sess.access_token, u.id);
+          const d = await loadSupabaseData(sess.access_token);
+          setData(d);
+        } catch (e) {
+          setWriteError("MIGRATION ERROR: " + e.message);
+        }
       }
-      if (event === "SIGNED_OUT") setData(loadData());
+      if (event === "SIGNED_OUT") { setSession(null); setData(loadData()); }
     });
 
     return () => subscription.unsubscribe();
@@ -1089,7 +1110,7 @@ export default function Alfred() {
 
       {/* Content */}
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 24px 80px" }}>
-        {view === "daily" && <DailyLedger date={selectedDate} data={data} setData={setData} isDark={isDark} user={user} setWriteError={setWriteError} />}
+        {view === "daily" && <DailyLedger date={selectedDate} data={data} setData={setData} isDark={isDark} session={session} setWriteError={setWriteError} />}
         {view === "weekly" && <WeeklyLedger weekOffset={weekOffset} data={data} isDark={isDark} />}
         {view === "standards" && <StandardsView isDark={isDark} />}
         {view === "analytics" && <AnalyticsView data={data} isDark={isDark} />}
