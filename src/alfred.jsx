@@ -437,9 +437,14 @@ const DailyLedger = ({ date, data, setData, isDark, user, setWriteError }) => {
     newData[dateKey] = { ...newData[dateKey], [virtueId]: !newData[dateKey][virtueId] };
     setData(newData);  // optimistic update
 
-    if (user) {
+    // Read session directly — avoids race condition where React user state
+    // hasn't updated yet after async getSession resolves
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUser = session?.user ?? null;
+
+    if (currentUser) {
       const { error } = await supabase.from("daily_logs").upsert(
-        { user_id: user.id, date: dateKey, virtues: newData[dateKey] },
+        { user_id: currentUser.id, date: dateKey, virtues: newData[dateKey] },
         { onConflict: "user_id,date" }
       );
       if (error) { setWriteError(JSON.stringify(error)); setData(data); }
