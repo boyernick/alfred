@@ -377,7 +377,8 @@ async function dbRequest(path, accessToken, options = {}) {
     const text = await res.text();
     throw new Error(res.status + " " + res.statusText + ": " + text);
   }
-  return res.status === 204 ? null : res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 async function loadSupabaseData(accessToken) {
