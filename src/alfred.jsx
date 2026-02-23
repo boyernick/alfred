@@ -427,7 +427,7 @@ const VirtueRow = ({ virtue, checked, onToggle, domainColor: dc }) => (
 
 // ── VIEWS ───────────────────────────────────────────────────────
 
-const DailyLedger = ({ date, data, setData, isDark, user }) => {
+const DailyLedger = ({ date, data, setData, isDark, user, setWriteError }) => {
   const dateKey = date;
   const dayData = data[dateKey] || {};
 
@@ -442,7 +442,7 @@ const DailyLedger = ({ date, data, setData, isDark, user }) => {
         { user_id: user.id, date: dateKey, virtues: newData[dateKey] },
         { onConflict: "user_id,date" }
       );
-      if (error) { console.error("Write error:", error); setData(data); }
+      if (error) { setWriteError(JSON.stringify(error)); setData(data); }
     } else {
       saveData(newData);
     }
@@ -912,6 +912,7 @@ export default function Alfred() {
   const [isDark, setIsDark] = useState(true);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [writeError, setWriteError] = useState(null);
 
   useEffect(() => {
     setData(loadData());
@@ -1082,9 +1083,11 @@ export default function Alfred() {
         </div>
       )}
 
+      {writeError && <div onClick={() => setWriteError(null)} style={{ background: "#6A001E", color: "#fff", padding: "12px 24px", fontFamily: "DM Sans, sans-serif", fontSize: 12, cursor: "pointer" }}>WRITE ERROR (tap to dismiss): {writeError}</div>}
+
       {/* Content */}
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 24px 80px" }}>
-        {view === "daily" && <DailyLedger date={selectedDate} data={data} setData={setData} isDark={isDark} user={user} />}
+        {view === "daily" && <DailyLedger date={selectedDate} data={data} setData={setData} isDark={isDark} user={user} setWriteError={setWriteError} />}
         {view === "weekly" && <WeeklyLedger weekOffset={weekOffset} data={data} isDark={isDark} />}
         {view === "standards" && <StandardsView isDark={isDark} />}
         {view === "analytics" && <AnalyticsView data={data} isDark={isDark} />}
