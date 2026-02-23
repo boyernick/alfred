@@ -444,9 +444,15 @@ const DailyLedger = ({ date, data, setData, isDark, user, setWriteError }) => {
         { user_id: user.id, date: dateKey, virtues: newData[dateKey] },
         { onConflict: "user_id,date" }
       );
-      if (error) { setWriteError("UPSERT ERROR: " + JSON.stringify(error)); setData(data); }
+      if (error) {
+        setWriteError("UPSERT ERROR: " + JSON.stringify(error));
+        setData(data);
+      } else {
+        setWriteError("SAVED to DB: " + dateKey + " virtues=" + JSON.stringify(newData[dateKey]));
+      }
     } else {
       saveData(newData);
+      setWriteError("SAVED to localStorage (not signed in)");
     }
   };
 
@@ -931,7 +937,12 @@ export default function Alfred() {
       setUser(u);
       if (event === "INITIAL_SESSION" && u) {
         const d = await loadSupabaseData(u.id);
-        if (d) setData(d);
+        if (d) {
+          setData(d);
+          setWriteError("LOADED " + Object.keys(d).length + " rows from DB for " + u.id.slice(0,8));
+        } else {
+          setWriteError("LOAD FAILED (null returned) for " + u.id.slice(0,8));
+        }
       }
       if (event === "SIGNED_IN") {
         await migrateLocalStorageToSupabase(u.id);
