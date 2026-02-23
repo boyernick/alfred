@@ -440,15 +440,20 @@ const DailyLedger = ({ date, data, setData, isDark, user, setWriteError }) => {
     setData(newData);  // optimistic update
 
     if (user) {
-      const { error } = await supabase.from("daily_logs").upsert(
-        { user_id: user.id, date: dateKey, virtues: newData[dateKey] },
-        { onConflict: "user_id,date" }
-      );
-      if (error) {
-        setWriteError("UPSERT ERROR: " + JSON.stringify(error));
+      try {
+        const { error } = await supabase.from("daily_logs").upsert(
+          { user_id: user.id, date: dateKey, virtues: newData[dateKey] },
+          { onConflict: "user_id,date" }
+        );
+        if (error) {
+          setWriteError("UPSERT ERROR: " + JSON.stringify(error));
+          setData(data);
+        } else {
+          setWriteError("SAVED to DB: " + dateKey);
+        }
+      } catch (e) {
+        setWriteError("UPSERT THREW: " + e.message);
         setData(data);
-      } else {
-        setWriteError("SAVED to DB: " + dateKey + " virtues=" + JSON.stringify(newData[dateKey]));
       }
     } else {
       saveData(newData);
